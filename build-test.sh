@@ -41,6 +41,7 @@ Usage: ./$(basename -- "$0") [--options]
 
 Options:
     -h|--help
+    -c|--clean
     -p|--port port-number
     -d|--target-dir build-directory
     -f|--full-target-path some/path/to/build-target
@@ -53,12 +54,18 @@ fullBuildPath() {
     echo $BUILD_PATH$BUILD_DIR
 }
 
+cleanInstances() {
+    docker rm $(docker stop $(docker ps -a --filter ancestor=unity-webgl -q 2>/dev/null ) 2>/dev/null) >&/dev/null 
+    docker rmi -f $(docker images -a --filter=reference='unity-webgl*' -q 2>/dev/null ) >&/dev/null
+}
+
 # Argument-parsing examples courtesy of StackOverflow
 # https://stackoverflow.com/a/35235757
 args=( )
 for arg; do
     case "$arg" in
         --name) args+=( -n ) ;;
+        --clean) args+=( -c ) ;;
         --port) args+=( -p ) ;;
         --full-target-path) args+=( -f ) ;;
         --build-path) args+=( -b ) ;;
@@ -73,6 +80,7 @@ set -- "${args[@]}"
 while getopts ":hn:p:f:b:d:" OPTION; do
     case $OPTION in
         n) CONTAINER_NAME="$OPTARG" ;;
+        c) cleanInstances && exit 0 ;;
         p) PORT=$OPTARG ;;
         f|b) BUILD_PATH=$OPTARG
             [[ "$OPTION" = f ]] && USE_FULL_PATH=true && BUILD_DIR=""
@@ -88,8 +96,7 @@ done
 [[ "$CONTAINER_NAME" = "" ]] && CONTAINER_NAME=$(basename $(fullBuildPath))
 
 # Stop and remove existing containers and images
-docker rm $(docker stop $(docker ps -a --filter ancestor=unity-webgl -q 2>/dev/null ) 2>/dev/null) >&/dev/null 
-docker rmi -f $(docker images -a --filter=reference='unity-webgl*' -q 2>/dev/null ) >&/dev/null
+cleanInstances
 
 # Build via Buildkit so it likes our .dockerignore
 DOCKER_BUILDKIT=1 docker build -t unity-webgl --build-arg BUILD_DIR=$(fullBuildPath) .
