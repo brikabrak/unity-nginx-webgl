@@ -18,7 +18,8 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-PROJ_ROOT_DIR=${DIR%%/Lib*}
+PROJ_ROOT_DIR=${DIR%%/bin*}
+PROJ_ROOT_DIR=${PROJ_ROOT_DIR%%/lib*}
 
 # Base variables
 PORT=8080
@@ -59,6 +60,10 @@ fullBuildPath() {
 
 tempDockerFilePath() {
     echo $PROJ_ROOT_DIR/$TMP_DF
+}
+
+tempDockerIgnoreFilePath() {
+    echo $(tempDockerFilePath).dockerignore
 }
 
 cleanInstances() {
@@ -109,6 +114,7 @@ done
 cd $PROJ_ROOT_DIR
 TMP_DF=df$(date +%s).tmp
 cp $DIR/Dockerfile $(tempDockerFilePath)
+cp $DIR/.dockerignore $(tempDockerIgnoreFilePath)
 
 # Stop and remove existing containers and images
 cleanInstances
@@ -116,6 +122,9 @@ cleanInstances
 # Build via Buildkit so it likes our .dockerignore
 DOCKER_BUILDKIT=1 docker build -f $(tempDockerFilePath) -t unity-webgl --build-arg BUILD_DIR=$(fullBuildPath) .
 UNITY_DOCKER_ID=$(docker run --name $CONTAINER_NAME -d -p $PORT:80 unity-webgl)
+
+rm $(tempDockerFilePath)
+rm $(tempDockerIgnoreFilePath)
 
 [[ ! $(docker top $UNITY_DOCKER_ID) ]] && echo "There was an issue deploying..." && exit 1
 
