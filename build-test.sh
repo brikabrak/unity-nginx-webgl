@@ -17,7 +17,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-cd "$(dirname "$0")"
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+PROJ_ROOT_DIR=${DIR%%/Lib*}
 
 # Base variables
 PORT=8080
@@ -42,10 +43,12 @@ Usage: ./$(basename -- "$0") [--options]
 Options:
     -h|--help
     -c|--clean
+    -n|--container-name docker-container-name
+    -r|--root-directory some/path/to/root-directory
     -p|--port port-number
     -d|--target-dir build-directory
-    -f|--full-target-path some/path/to/build-target
-        Note: -f overrides -d argument
+    -b|--build-path some/path/to/build-target
+        Note: -b overrides -d argument
 
 USE
 }
@@ -54,9 +57,15 @@ fullBuildPath() {
     echo $BUILD_PATH$BUILD_DIR
 }
 
+tempDockerFilePath() {
+    echo $PROJ_ROOT_DIR/$TMP_DF
+}
+
 cleanInstances() {
     docker rm $(docker stop $(docker ps -a --filter ancestor=unity-webgl -q 2>/dev/null ) 2>/dev/null) >&/dev/null 
     docker rmi -f $(docker images -a --filter=reference='unity-webgl*' -q 2>/dev/null ) >&/dev/null
+
+    echo "Existing instances now cleaned."
 }
 
 # Argument-parsing examples courtesy of StackOverflow
@@ -64,10 +73,10 @@ cleanInstances() {
 args=( )
 for arg; do
     case "$arg" in
-        --name) args+=( -n ) ;;
         --clean) args+=( -c ) ;;
+        --container-name) args+=( -n ) ;;
+        --root-directory) args+=( -r ) ;;
         --port) args+=( -p ) ;;
-        --full-target-path) args+=( -f ) ;;
         --build-path) args+=( -b ) ;;
         --target-dir) args+=( -d ) ;;
         --help) args+=( -h ) ;;
@@ -77,12 +86,13 @@ done
 
 set -- "${args[@]}"
 
-while getopts ":hn:p:f:b:d:" OPTION; do
+while getopts ":hcn:r:p:b:d:" OPTION; do
     case $OPTION in
         n) CONTAINER_NAME="$OPTARG" ;;
+        r) PROJ_ROOT_DIR="$OPTARG" ;;
         c) cleanInstances && exit 0 ;;
         p) PORT=$OPTARG ;;
-        f|b) BUILD_PATH=$OPTARG
+        b) BUILD_PATH=$OPTARG
             [[ "$OPTION" = f ]] && USE_FULL_PATH=true && BUILD_DIR=""
             ;;
         d) [[ "$USE_FULL_PATH" = false ]] && BUILD_DIR=$OPTARG || echo "Using full path, disregarding target directory";;
@@ -92,14 +102,19 @@ while getopts ":hn:p:f:b:d:" OPTION; do
     esac
 done
 
+[[ ! -d $PROJ_ROOT_DIR ]] || [[ ! $(ls | grep Assets) == *'Assets'*  ]] && echo "Root directory not Unity project. Use -r to specify a valid directory." 1>&2 && exit 1
 [[ ! -d $(fullBuildPath) ]] && echo "Target directory $(fullBuildPath) does not exist." 1>&2 && exit 1
 [[ "$CONTAINER_NAME" = "" ]] && CONTAINER_NAME=$(basename $(fullBuildPath))
+
+cd $PROJ_ROOT_DIR
+TMP_DF=df$(date +%s).tmp
+cp $DIR/Dockerfile $(tempDockerFilePath)
 
 # Stop and remove existing containers and images
 cleanInstances
 
 # Build via Buildkit so it likes our .dockerignore
-DOCKER_BUILDKIT=1 docker build -t unity-webgl --build-arg BUILD_DIR=$(fullBuildPath) .
+DOCKER_BUILDKIT=1 docker build -f $(tempDockerFilePath) -t unity-webgl --build-arg BUILD_DIR=$(fullBuildPath) .
 UNITY_DOCKER_ID=$(docker run --name $CONTAINER_NAME -d -p $PORT:80 unity-webgl)
 
 [[ ! $(docker top $UNITY_DOCKER_ID) ]] && echo "There was an issue deploying..." && exit 1
