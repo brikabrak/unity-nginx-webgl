@@ -6,7 +6,7 @@ This repository provides a barebones `Dockerfile` to use for testing Unity WebGL
 
 This docker will build an underlying Nginx system. There have been no additional features put in place to modify the base Nginx configuration. Host machine access will be through `localhost` at the preferred port.
 
-This is a personal project for helping to test local WebGL builds without additional server costs and is given as-is. For more licensing information, please peruse the `MIT License` included.
+This is a personal project for helping to test local WebGL builds without additional server costs and is given as-is. For more licensing information, please peruse the `GNU GPLv3 LICENSE` file included.
 
 ## Usage
 
